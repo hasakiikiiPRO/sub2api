@@ -31,7 +31,7 @@ func TestComputeDashboardHealthScore_DegradesOnBadSignals(t *testing.T) {
 		UpstreamErrorRate: 0.08,
 
 		Duration: OpsPercentiles{P99: intPtr(20_000)},
-		TTFT:     OpsPercentiles{P99: intPtr(2_000)},
+		TTFT:     OpsPercentiles{P90: intPtr(17_500)},
 
 		SystemMetrics: &OpsSystemMetricsSnapshot{
 			DBOK:                  boolPtr(false),
@@ -79,7 +79,7 @@ func TestComputeDashboardHealthScore_Comprehensive(t *testing.T) {
 				ErrorRate:         0,
 				UpstreamErrorRate: 0,
 				Duration:          OpsPercentiles{P99: intPtr(500)},
-				TTFT:              OpsPercentiles{P99: intPtr(100)},
+				TTFT:              OpsPercentiles{P90: intPtr(100)},
 				SystemMetrics: &OpsSystemMetricsSnapshot{
 					DBOK:               boolPtr(true),
 					RedisOK:            boolPtr(true),
@@ -99,7 +99,7 @@ func TestComputeDashboardHealthScore_Comprehensive(t *testing.T) {
 				ErrorRate:         0.003,
 				UpstreamErrorRate: 0.001,
 				Duration:          OpsPercentiles{P99: intPtr(800)},
-				TTFT:              OpsPercentiles{P99: intPtr(200)},
+				TTFT:              OpsPercentiles{P90: intPtr(200)},
 				SystemMetrics: &OpsSystemMetricsSnapshot{
 					DBOK:               boolPtr(true),
 					RedisOK:            boolPtr(true),
@@ -119,7 +119,7 @@ func TestComputeDashboardHealthScore_Comprehensive(t *testing.T) {
 				ErrorRate:         0.02,
 				UpstreamErrorRate: 0.01,
 				Duration:          OpsPercentiles{P99: intPtr(3000)},
-				TTFT:              OpsPercentiles{P99: intPtr(600)},
+				TTFT:              OpsPercentiles{P90: intPtr(600)},
 				SystemMetrics: &OpsSystemMetricsSnapshot{
 					DBOK:               boolPtr(true),
 					RedisOK:            boolPtr(true),
@@ -468,9 +468,10 @@ func TestComputeInfraHealth(t *testing.T) {
 					MemoryUsagePercent: float64Ptr(40),
 				},
 				JobHeartbeats: []*OpsJobHeartbeat{
-					{JobName: "ops_cleanup", LastSuccessAt: timePtr(now.Add(-17 * time.Hour))},
-					{JobName: "ops_preaggregation_daily", LastSuccessAt: timePtr(now.Add(-50 * time.Minute))},
-					{JobName: "ops_preaggregation_hourly", LastSuccessAt: timePtr(now.Add(-20 * time.Minute))},
+					{JobName: opsCleanupJobName, LastSuccessAt: timePtr(now.Add(-17 * time.Hour))},
+					{JobName: opsAggDailyJobName, LastSuccessAt: timePtr(now.Add(-50 * time.Minute))},
+					{JobName: opsAggHourlyJobName, LastSuccessAt: timePtr(now.Add(-12 * time.Minute))},
+					{JobName: opsScheduledReportJobName, LastSuccessAt: timePtr(now.Add(-1 * time.Minute))},
 					{JobName: "ops_metrics_collector", LastSuccessAt: timePtr(now.Add(-1 * time.Minute))},
 				},
 			},
@@ -488,7 +489,10 @@ func TestComputeInfraHealth(t *testing.T) {
 					MemoryUsagePercent: float64Ptr(40),
 				},
 				JobHeartbeats: []*OpsJobHeartbeat{
-					{JobName: "ops_cleanup", LastSuccessAt: timePtr(now.Add(-26 * time.Hour))},
+					{JobName: opsCleanupJobName, LastSuccessAt: timePtr(now.Add(-26 * time.Hour))},
+					{JobName: opsAggDailyJobName, LastSuccessAt: timePtr(now.Add(-80 * time.Minute))},
+					{JobName: opsAggHourlyJobName, LastSuccessAt: timePtr(now.Add(-20 * time.Minute))},
+					{JobName: opsScheduledReportJobName, LastSuccessAt: timePtr(now.Add(-20 * time.Minute))},
 					{JobName: "ops_metrics_collector", LastSuccessAt: timePtr(now.Add(-20 * time.Minute))},
 				},
 			},

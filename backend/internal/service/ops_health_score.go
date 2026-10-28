@@ -139,14 +139,14 @@ func computeInfraHealth(now time.Time, overview *OpsDashboardOverview) float64 {
 // failed. A single 15-minute budget flagged slow-cadence jobs as failed for most of their
 // cycle: the daily cleanup (cron, default 02:00) for ~23h a day and the daily
 // pre-aggregation (hourly ticker) for 45 minutes of every hour.
+// The cleanup budget assumes the default daily cleanup_schedule; a less frequent custom
+// schedule will still be flagged between runs.
 func opsJobStaleAfter(jobName string) time.Duration {
 	switch jobName {
-	case "ops_cleanup", "ops_scheduled_report":
+	case opsCleanupJobName:
 		return 25 * time.Hour
-	case "ops_preaggregation_daily":
-		return opsAggDailyInterval + 15*time.Minute
-	case "ops_preaggregation_hourly":
-		return opsAggHourlyInterval + 15*time.Minute
+	case opsAggDailyJobName:
+		return opsAggDailyInterval + opsAggDailyTimeout + 10*time.Minute
 	default:
 		return 15 * time.Minute
 	}
