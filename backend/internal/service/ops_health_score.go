@@ -48,14 +48,17 @@ func computeBusinessHealth(overview *OpsDashboardOverview) float64 {
 		}
 	}
 
-	// TTFT score: 1s → 100, 3s → 0 (linear)
-	// Time to first token is critical for user experience
+	// TTFT score: P90 5s → 100, 30s → 0 (linear)
+	// Time to first token is critical for user experience, but P99 of an LLM relay is
+	// dominated by a handful of long-context / thinking requests (a thinking model emits
+	// nothing until it has finished thinking), so a 1-3s P99 budget scores 0 for any real
+	// traffic. P90 with an LLM-sized budget still penalizes broad slowdowns.
 	ttftScore := 100.0
-	if overview.TTFT.P99 != nil {
-		p99 := float64(*overview.TTFT.P99)
-		if p99 > 1000 {
-			if p99 <= 3000 {
-				ttftScore = (3000 - p99) / 2000 * 100
+	if overview.TTFT.P90 != nil {
+		p90 := float64(*overview.TTFT.P90)
+		if p90 > 5000 {
+			if p90 <= 30000 {
+				ttftScore = (30000 - p90) / 25000 * 100
 			} else {
 				ttftScore = 0
 			}
@@ -120,7 +123,7 @@ func computeInfraHealth(now time.Time, overview *OpsDashboardOverview) float64 {
 		totalJobs++
 		if hb.LastErrorAt != nil && (hb.LastSuccessAt == nil || hb.LastErrorAt.After(*hb.LastSuccessAt)) {
 			failedJobs++
-		} else if hb.LastSuccessAt != nil && now.Sub(*hb.LastSuccessAt) > 15*time.Minute {
+		} else if hb.LastSuccessAt != nil && now.Sub(*hb.LastSuccessAt) > opsJobStaleAfter(hb.JobName) {
 			failedJobs++
 		}
 	}
@@ -130,6 +133,23 @@ func computeInfraHealth(now time.Time, overview *OpsDashboardOverview) float64 {
 
 	// Weighted combination
 	return storageScore*0.4 + computeScore*0.3 + jobScore*0.3
+}
+
+// opsJobStaleAfter returns how long a job may go without a success before it counts as
+// failed. A single 15-minute budget flagged slow-cadence jobs as failed for most of their
+// cycle: the daily cleanup (cron, default 02:00) for ~23h a day and the daily
+// pre-aggregation (hourly ticker) for 45 minutes of every hour.
+func opsJobStaleAfter(jobName string) time.Duration {
+	switch jobName {
+	case "ops_cleanup", "ops_scheduled_report":
+		return 25 * time.Hour
+	case "ops_preaggregation_daily":
+		return opsAggDailyInterval + 15*time.Minute
+	case "ops_preaggregation_hourly":
+		return opsAggHourlyInterval + 15*time.Minute
+	default:
+		return 15 * time.Minute
+	}
 }
 
 func clampFloat64(v float64, min float64, max float64) float64 {

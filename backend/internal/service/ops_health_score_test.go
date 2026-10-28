@@ -303,15 +303,48 @@ func TestComputeBusinessHealth(t *testing.T) {
 			wantMax: 78,
 		},
 		{
-			name: "TTFT boundary 2s",
+			name: "TTFT P90 midpoint 17.5s",
 			overview: &OpsDashboardOverview{
 				SLA:               0.99,
 				ErrorRate:         0,
 				UpstreamErrorRate: 0,
-				TTFT:              OpsPercentiles{P99: intPtr(2000)},
+				TTFT:              OpsPercentiles{P90: intPtr(17_500)},
 			},
 			wantMin: 75,
 			wantMax: 75,
+		},
+		{
+			name: "TTFT P90 within 5s budget",
+			overview: &OpsDashboardOverview{
+				SLA:               0.99,
+				ErrorRate:         0,
+				UpstreamErrorRate: 0,
+				TTFT:              OpsPercentiles{P90: intPtr(5_000)},
+			},
+			wantMin: 100,
+			wantMax: 100,
+		},
+		{
+			name: "TTFT P90 beyond 30s",
+			overview: &OpsDashboardOverview{
+				SLA:               0.99,
+				ErrorRate:         0,
+				UpstreamErrorRate: 0,
+				TTFT:              OpsPercentiles{P90: intPtr(45_000)},
+			},
+			wantMin: 50,
+			wantMax: 50,
+		},
+		{
+			name: "slow TTFT tail alone does not penalize",
+			overview: &OpsDashboardOverview{
+				SLA:               0.99,
+				ErrorRate:         0,
+				UpstreamErrorRate: 0,
+				TTFT:              OpsPercentiles{P90: intPtr(4_000), P99: intPtr(90_000)},
+			},
+			wantMin: 100,
+			wantMax: 100,
 		},
 		{
 			name: "upstream error dominates",
@@ -423,6 +456,44 @@ func TestComputeInfraHealth(t *testing.T) {
 			},
 			wantMin: 70,
 			wantMax: 90,
+		},
+		{
+			name: "daily jobs within their cadence are healthy",
+			overview: &OpsDashboardOverview{
+				RequestCountTotal: 1000,
+				SystemMetrics: &OpsSystemMetricsSnapshot{
+					DBOK:               boolPtr(true),
+					RedisOK:            boolPtr(true),
+					CPUUsagePercent:    float64Ptr(30),
+					MemoryUsagePercent: float64Ptr(40),
+				},
+				JobHeartbeats: []*OpsJobHeartbeat{
+					{JobName: "ops_cleanup", LastSuccessAt: timePtr(now.Add(-17 * time.Hour))},
+					{JobName: "ops_preaggregation_daily", LastSuccessAt: timePtr(now.Add(-50 * time.Minute))},
+					{JobName: "ops_preaggregation_hourly", LastSuccessAt: timePtr(now.Add(-20 * time.Minute))},
+					{JobName: "ops_metrics_collector", LastSuccessAt: timePtr(now.Add(-1 * time.Minute))},
+				},
+			},
+			wantMin: 100,
+			wantMax: 100,
+		},
+		{
+			name: "jobs past their cadence count as failed",
+			overview: &OpsDashboardOverview{
+				RequestCountTotal: 1000,
+				SystemMetrics: &OpsSystemMetricsSnapshot{
+					DBOK:               boolPtr(true),
+					RedisOK:            boolPtr(true),
+					CPUUsagePercent:    float64Ptr(30),
+					MemoryUsagePercent: float64Ptr(40),
+				},
+				JobHeartbeats: []*OpsJobHeartbeat{
+					{JobName: "ops_cleanup", LastSuccessAt: timePtr(now.Add(-26 * time.Hour))},
+					{JobName: "ops_metrics_collector", LastSuccessAt: timePtr(now.Add(-20 * time.Minute))},
+				},
+			},
+			wantMin: 70,
+			wantMax: 70,
 		},
 	}
 
