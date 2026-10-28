@@ -2614,6 +2614,19 @@ func (s *GatewayService) isModelSupportedByAccountWithContext(ctx context.Contex
 		}
 	}
 	if account.Platform == PlatformAntigravity {
+		if publicModel, ok := RequestedPublicModelFromContext(ctx); ok {
+			if family := antigravityEffortModelFamily(publicModel); family != "" &&
+				(requestedModel == family+"-low" || requestedModel == family+"-medium" || requestedModel == family+"-high") {
+				// Early normalization must not bypass a custom account alias into
+				// another family. Default Argon -> high is only the legacy default.
+				mapping := stringMappingFromRaw(account.Credentials["model_mapping"])
+				if mapped, matched := resolveRequestedModelInMapping(mapping, publicModel); matched &&
+					mapped != publicModel && mapped != family && mapped != requestedModel &&
+					!(publicModel == "gemini-4-argon" && mapped == "gemini-4-argon-high") {
+					return false
+				}
+			}
+		}
 		if strings.TrimSpace(requestedModel) == "" {
 			return true
 		}

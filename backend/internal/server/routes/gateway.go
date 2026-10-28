@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -499,6 +500,7 @@ func RegisterGatewayRoutes(
 	antigravityV1.Use(middleware.ForcePlatform(service.PlatformAntigravity))
 	antigravityV1.Use(gin.HandlerFunc(apiKeyAuth))
 	antigravityV1.Use(groupModelAllowlist)
+	antigravityV1.Use(compositeTarget)
 	antigravityV1.Use(requireGroupAnthropic)
 	{
 		antigravityV1.POST("/messages", h.Gateway.Messages)
@@ -515,6 +517,7 @@ func RegisterGatewayRoutes(
 	antigravityV1Beta.Use(middleware.ForcePlatform(service.PlatformAntigravity))
 	antigravityV1Beta.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
 	antigravityV1Beta.Use(groupModelAllowlist)
+	antigravityV1Beta.Use(compositeGeminiTarget)
 	antigravityV1Beta.Use(requireGroupGoogle)
 	{
 		antigravityV1Beta.GET("/models", h.Gateway.GeminiV1BetaListModels)
@@ -552,7 +555,8 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 	}
 	return func(c *gin.Context) {
 		apiKey, ok := middleware.GetAPIKeyFromContext(c)
-		if !ok || apiKey == nil || apiKey.Group == nil || apiKey.Group.Platform != service.PlatformComposite {
+		if !ok || apiKey == nil || apiKey.Group == nil ||
+			(apiKey.Group.Platform != service.PlatformComposite && apiKey.Group.Platform != service.PlatformAntigravity && !isForcedAntigravity(c)) {
 			c.Next()
 			return
 		}
@@ -580,7 +584,7 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 		routePath := c.FullPath()
 		model := requestmodel.FromBodyForRoute(routePath, c.GetHeader("Content-Type"), body)
 		if model != "" {
-			decision, err := resolver.Resolve(c.Request.Context(), apiKey.Group.ID, model, compositeRouteEndpointForPath(c.Request.URL.Path))
+			decision, err := resolveGatewayModelRoute(c, resolver, apiKey, model, compositeRouteEndpointForPath(c.Request.URL.Path))
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"type": "server_error", "message": "Failed to resolve composite model route"}})
 				c.Abort()
@@ -593,6 +597,30 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
 				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "message": decision.AmbiguousMessage()}})
 				return
+			}
+			routeUpstreamModel := decision.UpstreamModel
+			if !requestmodel.IsLiveRequestRoute(routePath) {
+				decision, err = service.ResolveAntigravityEffortModel(decision, body)
+				if err != nil {
+					c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "message": err.Error()}})
+					return
+				}
+			}
+			if decision.UpstreamModel != routeUpstreamModel {
+				// Collapse duplicate/case-variant model keys so all downstream JSON
+				// parsers and the scheduler observe the same concrete variant.
+				var fields map[string]json.RawMessage
+				if err := json.Unmarshal(body, &fields); err != nil {
+					c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "message": "Invalid request body"}})
+					return
+				}
+				for key := range fields {
+					if strings.EqualFold(key, "model") {
+						delete(fields, key)
+					}
+				}
+				fields["model"], _ = json.Marshal(decision.UpstreamModel)
+				body, _ = json.Marshal(fields)
 			}
 			if decision.Matched {
 				c.Request = c.Request.WithContext(service.WithCompositeRouteDecision(c.Request.Context(), decision))
@@ -610,20 +638,53 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 	}
 }
 
+func isForcedAntigravity(c *gin.Context) bool {
+	platform, ok := middleware.GetForcePlatformFromContext(c)
+	return ok && platform == service.PlatformAntigravity
+}
+
+func resolveGatewayModelRoute(c *gin.Context, resolver *service.CompositeRouteResolver, apiKey *service.APIKey, model, endpoint string) (service.CompositeRouteDecision, error) {
+	if isForcedAntigravity(c) || apiKey.Group.Platform == service.PlatformAntigravity {
+		return service.CompositeRouteDecision{
+			Matched: true, Source: service.CompositeRouteSourceDetector, GroupID: apiKey.Group.ID,
+			PublicModel: model, UpstreamModel: model, TargetPlatform: service.PlatformAntigravity, Endpoint: endpoint,
+		}, nil
+	}
+	return resolver.Resolve(c.Request.Context(), apiKey.Group.ID, model, endpoint)
+}
+
 func compositeGeminiTargetPlatformMiddleware(resolver *service.CompositeRouteResolver) gin.HandlerFunc {
 	if resolver == nil {
 		resolver = service.NewCompositeRouteResolver(nil)
 	}
 	return func(c *gin.Context) {
 		apiKey, ok := middleware.GetAPIKeyFromContext(c)
-		if ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.Platform == service.PlatformComposite {
+		if ok && apiKey != nil && apiKey.Group != nil &&
+			(apiKey.Group.Platform == service.PlatformComposite || apiKey.Group.Platform == service.PlatformAntigravity || isForcedAntigravity(c)) {
 			model := compositeGeminiModelFromParams(c)
 			if model != "" {
-				decision, err := resolver.Resolve(c.Request.Context(), apiKey.Group.ID, model, service.CompositeRouteEndpointGemini)
+				decision, err := resolveGatewayModelRoute(c, resolver, apiKey, model, service.CompositeRouteEndpointGemini)
 				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"type": "server_error", "message": "Failed to resolve composite model route"}})
-					c.Abort()
+					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": gin.H{"type": "server_error", "message": "Failed to resolve composite model route"}})
 					return
+				}
+				if decision.Matched && decision.TargetPlatform == service.PlatformAntigravity && c.Request.Method == http.MethodPost {
+					body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
+					if err != nil {
+						status := http.StatusBadRequest
+						var maxErr *http.MaxBytesError
+						if errors.As(err, &maxErr) {
+							status = http.StatusRequestEntityTooLarge
+						}
+						c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": status, "message": "Failed to read request body"}})
+						return
+					}
+					decision, err = service.ResolveAntigravityEffortModel(decision, body)
+					requestmodel.ResetRequestBody(c.Request, body)
+					if err != nil {
+						c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": http.StatusBadRequest, "message": err.Error()}})
+						return
+					}
 				}
 				if decision.Matched {
 					c.Request = c.Request.WithContext(service.WithCompositeRouteDecision(c.Request.Context(), decision))

@@ -70,6 +70,40 @@ the route's upstream model is applied before channel/account mapping. Subsequent
 turns can repeat or omit the public model. Changing it requires reconnecting so
 the gateway can resolve the route and select an account again.
 
+## Antigravity Effort Aliases
+
+To expose one model per Antigravity family with a separate effort control, add
+`exact` routes with target platform `antigravity` and endpoint `any`:
+
+| Public model | Upstream family |
+| --- | --- |
+| `claude-opus-5-5-antigravity` | `claude-opus-5-5` |
+| `claude-sonnet-5-5-antigravity` | `claude-sonnet-5-5` |
+| `gemini-4-argon` | `gemini-4-argon` |
+
+The short aliases `ag-claude-opus-5-5` and `ag-claude-sonnet-5-5` are also
+accepted when routed to the corresponding Antigravity family. A passthrough
+`gemini-` prefix route to Antigravity also supports bare Argon. Configure the
+public aliases in the existing family pricing rules and ensure account model
+mappings permit all three concrete variants; routes do not create prices.
+
+Before account selection, the gateway resolves `low`, `medium`, or `high` to
+`<family>-low`, `-medium`, or `-high`. It reads Messages/count-tokens
+`output_config.effort`, Responses `reasoning.effort`, Chat Completions
+`reasoning_effort`, or Gemini `generationConfig.thinkingConfig.thinkingLevel`.
+`xhigh` and `max` cap at `high`; unsupported effort values return HTTP 400.
+Without effort, legacy thinking budgets are used, then `high` is the default.
+Selection, cooldown checks and forwarding use the concrete variant while usage
+records retain the original public alias. The same normalization applies to
+Antigravity-only groups and the forced `/antigravity/v1` and
+`/antigravity/v1beta` adapters.
+
+Explicit concrete suffixes and pinned custom route targets keep their fixed
+semantics, regardless of effort. Other custom aliases/account-owned mappings
+are not reinterpreted. Native `claude-opus-5-5` and `claude-sonnet-5-5` routes
+remain unchanged; do not replace their Anthropic routes with these AG aliases.
+This feature does not add WebSocket or Live support.
+
 ## Built-In Detection
 
 Composite routing detects common public model IDs and provider-prefixed IDs:
