@@ -450,6 +450,40 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).toContain('admin.accounts.usageWindow.gemini3Image|70|2026-03-01T09:00:00Z')
   })
 
+  it('Antigravity 按前缀聚合 Argon 周额度与新版 Claude 模型', async () => {
+    getUsage.mockResolvedValue({
+      antigravity_quota: {
+        'gemini-4-argon-high': { utilization: 99, reset_time: '2026-11-04T10:20:42Z' },
+        'gemini-4-argon-low': { utilization: 99, reset_time: '2026-11-04T10:20:42Z' },
+        'claude-opus-5-5-high': { utilization: 12, reset_time: '2026-10-29T13:18:51Z' },
+        'claude-sonnet-5-5-low': { utilization: 3, reset_time: '2026-10-29T13:10:00Z' },
+        'gemini-3-flash': { utilization: 0, reset_time: '2026-10-29T12:50:39Z' }
+      }
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 1003, platform: 'antigravity', type: 'oauth', extra: {} })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt', 'color'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('admin.accounts.usageWindow.gemini4Argon|99|2026-11-04T10:20:42Z')
+    expect(text).toContain('admin.accounts.usageWindow.claude|12|2026-10-29T13:10:00Z')
+    expect(text).toContain('admin.accounts.usageWindow.gemini3Flash|0|')
+  })
+
   it('Antigravity 会显示 AI Credits 余额信息', async () => {
     getUsage.mockResolvedValue({
       ai_credits: [

@@ -323,6 +323,15 @@
           color="purple"
         />
 
+        <!-- Gemini 4 Argon（独立周额度，与 Flash/Claude 的 5 小时窗口分开计） -->
+        <UsageProgressBar
+          v-if="antigravityArgonUsageFromAPI !== null"
+          :label="t('admin.accounts.usageWindow.gemini4Argon')"
+          :utilization="antigravityArgonUsageFromAPI.utilization"
+          :resets-at="antigravityArgonUsageFromAPI.resetTime"
+          color="indigo"
+        />
+
         <!-- Claude -->
         <UsageProgressBar
           v-if="antigravityClaudeUsageFromAPI !== null"
@@ -917,15 +926,19 @@ const antigravity3ImageUsageFromAPI = computed(() =>
   getAntigravityUsageFromAPI(['gemini-2.5-flash-image', 'gemini-3.1-flash-image', 'gemini-3-pro-image'])
 )
 
+// 按前缀匹配上游返回的模型名：新模型（如 claude-opus-5-5-high、gemini-4-argon-low）
+// 不必再改前端白名单
+const antigravityModelsByPrefix = (prefix: string): string[] =>
+  Object.keys(usageInfo.value?.antigravity_quota ?? {}).filter((m) => m.startsWith(prefix))
+
+// Gemini 4 Argon from API (all effort variants)
+const antigravityArgonUsageFromAPI = computed(() =>
+  getAntigravityUsageFromAPI(antigravityModelsByPrefix('gemini-4-argon'))
+)
+
 // Claude from API (all Claude model variants)
 const antigravityClaudeUsageFromAPI = computed(() =>
-  getAntigravityUsageFromAPI([
-    'claude-fable-5-1',
-    'claude-fable-5',
-    'claude-sonnet-4-5', 'claude-opus-4-5-thinking',
-    'claude-sonnet-4-6', 'claude-opus-4-6', 'claude-opus-4-6-thinking',
-    'claude-opus-4-7', 'claude-opus-4-8',
-  ])
+  getAntigravityUsageFromAPI(antigravityModelsByPrefix('claude-'))
 )
 
 const aiCreditsDisplay = computed(() => {
