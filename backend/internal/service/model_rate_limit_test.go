@@ -280,6 +280,30 @@ func TestIsModelRateLimited_AntigravityImageDoesNotInheritGeminiFamilyLimit(t *t
 	require.True(t, account.isModelRateLimitedWithContext(context.Background(), "gemini-3-pro-image-preview"))
 }
 
+func TestIsModelRateLimited_AntigravityArgonIsolatedFromGeminiFamily(t *testing.T) {
+	future := time.Now().Add(10 * time.Minute).Format(time.RFC3339)
+	account := &Account{
+		Platform: PlatformAntigravity,
+		Extra: map[string]any{
+			modelRateLimitsKey: map[string]any{
+				antigravityGeminiModelRateLimitKey: map[string]any{"rate_limit_reset_at": future},
+			},
+		},
+	}
+	// 家族限流（来自 Flash 等）不挡 Argon
+	for _, model := range []string{"gemini-4-argon", "gemini-4-argon-high", "gemini-4-argon-low"} {
+		require.False(t, account.isModelRateLimitedWithContext(context.Background(), model), model)
+	}
+	require.True(t, account.isModelRateLimitedWithContext(context.Background(), "gemini-3-flash"))
+
+	// Argon 自身限流只挡 Argon
+	account.Extra[modelRateLimitsKey] = map[string]any{
+		"gemini-4-argon-high": map[string]any{"rate_limit_reset_at": future},
+	}
+	require.True(t, account.isModelRateLimitedWithContext(context.Background(), "gemini-4-argon-high"))
+	require.False(t, account.isModelRateLimitedWithContext(context.Background(), "gemini-3-flash"))
+}
+
 func TestIsModelRateLimited_Antigravity_ThinkingAffectsModelKey(t *testing.T) {
 	now := time.Now()
 	future := now.Add(10 * time.Minute).Format(time.RFC3339)

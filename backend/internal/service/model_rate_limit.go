@@ -79,7 +79,7 @@ func (a *Account) modelRateLimitKeysForRequest(ctx context.Context, requestedMod
 	keys := []string{modelKey}
 	switch a.Platform {
 	case PlatformAntigravity:
-		if isAntigravityGeminiModel(modelKey) && !isAntigravityGeminiImageModel(modelKey) && modelKey != antigravityGeminiModelRateLimitKey {
+		if antigravityGeminiSharesFamilyLimit(modelKey) {
 			keys = append(keys, antigravityGeminiModelRateLimitKey)
 		}
 	case PlatformOpenAI:
@@ -164,10 +164,24 @@ func antigravityModelRateLimitKeys(model string) []string {
 		return nil
 	}
 	keys := []string{model}
-	if isAntigravityGeminiModel(model) && !isAntigravityGeminiImageModel(model) && model != antigravityGeminiModelRateLimitKey {
+	if antigravityGeminiSharesFamilyLimit(model) {
 		keys = append(keys, antigravityGeminiModelRateLimitKey)
 	}
 	return keys
+}
+
+// antigravityGeminiSharesFamilyLimit 判断该 Gemini 模型是否与其它 Gemini 文本模型共用
+// antigravity:gemini 家族限流。图片模型和 Argon 各有独立配额（Argon 是周额度，
+// 用满后要等一周），它们的 429 不能连坐整个家族，家族限流也不该挡住它们。
+func antigravityGeminiSharesFamilyLimit(model string) bool {
+	return isAntigravityGeminiModel(model) &&
+		!isAntigravityGeminiImageModel(model) &&
+		!isAntigravityGeminiArgonModel(model) &&
+		model != antigravityGeminiModelRateLimitKey
+}
+
+func isAntigravityGeminiArgonModel(model string) bool {
+	return strings.HasPrefix(normalizeAntigravityModelName(model), "gemini-4-argon")
 }
 
 func isAntigravityGeminiImageModel(model string) bool {
