@@ -92,6 +92,7 @@ export default {
     title: 'Announcements',
     description: 'View system announcements',
     unreadOnly: 'Show unread only',
+    dontRemindToday: "Don't remind me today",
     markRead: 'Mark as read',
     markAllRead: 'Mark all as read',
     viewAll: 'View all announcements',

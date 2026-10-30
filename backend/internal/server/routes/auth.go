@@ -247,6 +247,14 @@ func RegisterAuthRoutes(
 		settings.GET("/email-unsubscribe", h.Setting.UnsubscribeNotificationEmail)
 	}
 
+	// 公开弹窗公告（无需认证）：只返回面向全部用户的弹窗公告，不含用户数据；
+	// 服务层短时缓存 + 按 IP 兜底限流。
+	publicAnnouncements := v1.Group("/public")
+	publicAnnouncements.Use(panelRateLimiter.PublicIP())
+	{
+		publicAnnouncements.GET("/announcements", h.Announcement.ListPublic)
+	}
+
 	// 需要认证的当前用户信息
 	authenticated := v1.Group("")
 	authenticated.Use(gin.HandlerFunc(jwtAuth))

@@ -126,4 +126,38 @@ describe('AnnouncementPopup', () => {
     expect(wrapper.emitted('close')).toBeUndefined()
     wrapper.unmount()
   })
+
+  it('offers "don\'t remind today" which snoozes via the store, and restores body scroll on close', async () => {
+    const store = useAnnouncementStore()
+    const dismiss = vi.spyOn(store, 'dismissPopup').mockImplementation(async () => {
+      store.currentPopup = null
+    })
+    store.currentPopup = {
+      id: 7,
+      title: 'Guide',
+      content: 'hello',
+      notify_mode: 'popup',
+      created_at: '2026-10-21T00:00:00Z',
+      updated_at: '2026-10-21T00:00:00Z',
+    }
+    const wrapper = mount(AnnouncementPopup)
+    await wrapper.vm.$nextTick()
+    expect(document.body.style.overflow).toBe('hidden')
+
+    const snooze = document.body.querySelector('[data-testid="announcement-popup-snooze-today"]') as HTMLButtonElement
+    expect(snooze?.textContent).toContain('announcements.dontRemindToday')
+    snooze.click()
+    await wrapper.vm.$nextTick()
+
+    expect(dismiss).toHaveBeenCalledWith({ snoozeToday: true })
+    expect(document.body.style.overflow).toBe('')
+    wrapper.unmount()
+  })
+
+  it('hides the snooze button in admin preview mode', async () => {
+    const wrapper = mount(AnnouncementPopup, { props: { preview: true, announcement } })
+    await wrapper.vm.$nextTick()
+    expect(document.body.querySelector('[data-testid="announcement-popup-snooze-today"]')).toBeNull()
+    wrapper.unmount()
+  })
 })

@@ -29,7 +29,7 @@
                     <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
                     <span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
                   </span>
-                  {{ t('announcements.unread') }}
+                  {{ t('announcements.title') }}
                 </span>
               </div>
 
@@ -63,7 +63,15 @@
 
           <!-- Footer -->
           <div class="border-t border-gray-100 bg-gray-50/50 px-8 py-5 dark:border-dark-700 dark:bg-dark-900/30">
-            <div class="flex items-center justify-end">
+            <div class="flex flex-wrap items-center justify-end gap-3">
+              <button
+                v-if="!preview"
+                @click="handleSnoozeToday"
+                data-testid="announcement-popup-snooze-today"
+                class="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300 dark:hover:bg-dark-700"
+              >
+                {{ t('announcements.dontRemindToday') }}
+              </button>
               <button
                 @click="handleDismiss"
                 data-testid="announcement-popup-dismiss"
@@ -76,7 +84,7 @@
                   <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
-                  {{ preview ? t('common.close') : t('announcements.markRead') }}
+                  {{ t('common.close') }}
                 </span>
               </button>
             </div>
@@ -137,14 +145,27 @@ function handleDismiss() {
   announcementStore.dismissPopup()
 }
 
-// Manage body overflow — only set, never unset (bell component handles restore)
+function handleSnoozeToday() {
+  announcementStore.dismissPopup({ snoozeToday: true })
+}
+
+// Manage body overflow. Restore what we replaced when the popup closes, because on
+// public pages (home/login) the bell component that normally restores it is not mounted.
+let overflowBeforePopup: string | null = null
 watch(
   displayedAnnouncement,
   (popup) => {
     if (popup) {
+      if (overflowBeforePopup === null) {
+        overflowBeforePopup = document.body.style.overflow === 'hidden' ? '' : document.body.style.overflow
+      }
       document.body.style.overflow = 'hidden'
     } else if (props.preview) {
       document.body.style.overflow = ''
+      overflowBeforePopup = null
+    } else if (overflowBeforePopup !== null) {
+      document.body.style.overflow = overflowBeforePopup
+      overflowBeforePopup = null
     }
   },
   { immediate: true },

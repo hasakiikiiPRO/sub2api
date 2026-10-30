@@ -76,3 +76,31 @@ func UserAnnouncementFromService(a *service.UserAnnouncement) *UserAnnouncement 
 		UpdatedAt:  a.Announcement.UpdatedAt,
 	}
 }
+
+// PublicAnnouncement 匿名可见的弹窗公告：仅包含展示所需的最少字段，不含任何用户/定向信息。
+type PublicAnnouncement struct {
+	ID         int64      `json:"id"`
+	Title      string     `json:"title"`
+	Content    string     `json:"content"`
+	NotifyMode string     `json:"notify_mode"`
+	StartsAt   *time.Time `json:"starts_at,omitempty"`
+	EndsAt     *time.Time `json:"ends_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+}
+
+func PublicAnnouncementFromService(a *service.Announcement) *PublicAnnouncement {
+	if a == nil {
+		return nil
+	}
+	return &PublicAnnouncement{
+		ID:         a.ID,
+		Title:      a.Title,
+		Content:    a.Content,
+		NotifyMode: a.NotifyMode,
+		StartsAt:   a.StartsAt,
+		EndsAt:     a.EndsAt,
+		CreatedAt:  a.CreatedAt,
+		UpdatedAt:  a.UpdatedAt,
+	}
+}

@@ -16,6 +16,9 @@ type AnnouncementService struct {
 	readRepo         AnnouncementReadRepository
 	userRepo         UserRepository
 	userSubRepo      UserSubscriptionRepository
+
+	// publicPopupCache 缓存匿名公开弹窗公告，避免匿名访问每次都查库。
+	publicPopupCache publicPopupCache
 }
 
 func NewAnnouncementService(
@@ -130,6 +133,7 @@ func (s *AnnouncementService) Create(ctx context.Context, input *CreateAnnouncem
 	if err := s.announcementRepo.Create(ctx, a); err != nil {
 		return nil, fmt.Errorf("create announcement: %w", err)
 	}
+	s.publicPopupCache.invalidate()
 	return a, nil
 }
 
@@ -206,6 +210,7 @@ func (s *AnnouncementService) Update(ctx context.Context, id int64, input *Updat
 	if err := s.announcementRepo.Update(ctx, a); err != nil {
 		return nil, fmt.Errorf("update announcement: %w", err)
 	}
+	s.publicPopupCache.invalidate()
 	return a, nil
 }
 
@@ -213,6 +218,7 @@ func (s *AnnouncementService) Delete(ctx context.Context, id int64) error {
 	if err := s.announcementRepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete announcement: %w", err)
 	}
+	s.publicPopupCache.invalidate()
 	return nil
 }
 

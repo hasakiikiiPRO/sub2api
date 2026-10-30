@@ -17,9 +17,18 @@ export async function markRead(id: number): Promise<{ message: string }> {
   return data
 }
 
+/**
+ * Popup announcements targeted at everyone. Anonymous (no login required).
+ */
+export async function listPublic(): Promise<UserAnnouncement[]> {
+  const { data } = await apiClient.get<UserAnnouncement[]>('/public/announcements')
+  return data
+}
+
 const announcementsAPI = {
   list,
-  markRead
+  markRead,
+  listPublic
 }
 
 export default announcementsAPI

@@ -4,6 +4,36 @@ import { announcementsAPI } from '@/api'
 import type { UserAnnouncement } from '@/types'
 
 const THROTTLE_MS = 20 * 60 * 1000 // 20 minutes
+const SNOOZE_KEY_PREFIX = 'sub2api:announcement-snooze:'
+
+/** Local calendar date (YYYY-MM-DD) in the browser's timezone. */
+export function localDateKey(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function snoozeStorageKey(id: number): string {
+  return `${SNOOZE_KEY_PREFIX}${id}`
+}
+
+/** True when the user chose "don't remind again today" for this announcement today. */
+export function isSnoozedToday(id: number, now: Date = new Date()): boolean {
+  try {
+    return window.localStorage.getItem(snoozeStorageKey(id)) === localDateKey(now)
+  } catch {
+    return false
+  }
+}
+
+function snoozeForToday(id: number, now: Date = new Date()) {
+  try {
+    window.localStorage.setItem(snoozeStorageKey(id), localDateKey(now))
+  } catch {
+    // localStorage unavailable (private mode etc.): closing still works for this page load
+  }
+}
 
 export const useAnnouncementStore = defineStore('announcements', () => {
   // State
@@ -49,9 +79,11 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     }
   }
 
-  function enqueueNewPopups() {
-    const newPopups = announcements.value.filter(
-      (a) => a.notify_mode === 'popup' && !a.read_at && !shownPopupIds.has(a.id)
+  function enqueueNewPopups(source: UserAnnouncement[] = announcements.value) {
+    // Popups are shown once per page load (shownPopupIds) regardless of read state;
+    // only the local "don't remind again today" choice suppresses them.
+    const newPopups = source.filter(
+      (a) => a.notify_mode === 'popup' && !shownPopupIds.has(a.id) && !isSnoozedToday(a.id)
     )
     if (newPopups.length === 0) return
 
@@ -66,6 +98,18 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     }
   }
 
+  // Anonymous + logged-in: popup announcements targeted at everyone, fetched on app load.
+  async function fetchPublicPopups() {
+    const generation = fetchGeneration
+    try {
+      const items = await announcementsAPI.listPublic()
+      if (generation !== fetchGeneration) return
+      enqueueNewPopups(items)
+    } catch (err: any) {
+      console.error('Failed to fetch public announcements:', err)
+    }
+  }
+
   function showNextPopup() {
     if (popupQueue.value.length === 0) {
       currentPopup.value = null
@@ -75,13 +119,21 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     shownPopupIds.add(currentPopup.value.id)
   }
 
-  async function dismissPopup() {
+  async function dismissPopup(options: { snoozeToday?: boolean } = {}) {
     if (!currentPopup.value) return
     const id = currentPopup.value.id
     currentPopup.value = null
 
-    // Mark as read (fire-and-forget, UI already updated)
-    markAsRead(id)
+    if (options.snoozeToday) {
+      snoozeForToday(id)
+    }
+
+    // Keep the bell's read tracking for logged-in users (fire-and-forget).
+    // Only for announcements from the user's own list, so anonymous visitors never hit the auth API.
+    const own = announcements.value.find((a) => a.id === id)
+    if (own && !own.read_at) {
+      markAsRead(id)
+    }
 
     // Show next popup after a short delay
     if (popupQueue.value.length > 0) {
@@ -142,6 +194,7 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     unreadCount,
     // Actions
     fetchAnnouncements,
+    fetchPublicPopups,
     dismissPopup,
     markAsRead,
     markAllAsRead,

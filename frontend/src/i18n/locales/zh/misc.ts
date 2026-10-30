@@ -90,6 +90,7 @@ export default {
     title: '公告',
     description: '查看系统公告',
     unreadOnly: '仅显示未读',
+    dontRemindToday: '今日不再提醒',
     markRead: '标记已读',
     markAllRead: '全部已读',
     viewAll: '查看全部公告',

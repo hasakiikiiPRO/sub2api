@@ -48,6 +48,23 @@ func (h *AnnouncementHandler) List(c *gin.Context) {
 	response.Success(c, out)
 }
 
+// ListPublic returns popup announcements targeted at everyone, for anonymous visitors.
+// GET /api/v1/public/announcements
+func (h *AnnouncementHandler) ListPublic(c *gin.Context) {
+	items, err := h.announcementService.ListPublicPopups(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	out := make([]dto.PublicAnnouncement, 0, len(items))
+	for i := range items {
+		out = append(out, *dto.PublicAnnouncementFromService(&items[i]))
+	}
+	c.Header("Cache-Control", "no-store")
+	response.Success(c, out)
+}
+
 // MarkRead marks an announcement as read for current user
 // POST /api/v1/announcements/:id/read
 func (h *AnnouncementHandler) MarkRead(c *gin.Context) {

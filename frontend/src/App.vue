@@ -153,6 +153,10 @@ onMounted(async () => {
     // If setup endpoint fails, assume normal mode and continue
   }
 
+  // Popup announcements for everyone (visitors and logged-in users), every page load.
+  // Not awaited so it never delays the rest of the startup.
+  announcementStore.fetchPublicPopups()
+
   // Load public settings into appStore (will be cached for other components)
   await appStore.fetchPublicSettings()
 
