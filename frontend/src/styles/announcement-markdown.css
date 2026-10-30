@@ -59,7 +59,7 @@
 }
 
 .markdown-body code {
-  @apply rounded-lg bg-gray-100 px-2 py-1 font-mono text-[13px] text-pink-600 dark:bg-dark-700 dark:text-pink-400;
+  @apply rounded-lg bg-gray-100 px-2 py-1 font-mono text-[13px] text-pink-700 dark:bg-dark-700 dark:text-pink-300;
 }
 
 .markdown-body pre {
@@ -67,7 +67,7 @@
 }
 
 .markdown-body pre code {
-  @apply bg-transparent p-0 text-[13px] text-gray-800 dark:text-gray-200;
+  @apply bg-transparent p-0 text-[13px] text-gray-800 dark:bg-transparent dark:text-gray-200;
 }
 
 .markdown-body hr {
@@ -110,4 +110,47 @@
 
 .markdown-body em {
   @apply italic text-gray-600 dark:text-gray-400;
+}
+
+/*
+ * Callout box for announcements: <div class="callout"> ... </div>
+ * Theme-aware so text keeps WCAG AA contrast in light and dark mode.
+ */
+.markdown-body .callout {
+  @apply my-3 rounded-xl border border-l-4 border-blue-200 border-l-blue-500 bg-blue-50 px-4 py-3.5 text-gray-800 dark:border-dark-600 dark:border-l-blue-400 dark:bg-dark-900/60 dark:text-gray-200;
+}
+
+.markdown-body .callout a {
+  @apply text-blue-700 decoration-blue-700/40 dark:text-blue-300 dark:decoration-blue-300/40;
+}
+
+.markdown-body .callout > :first-child {
+  @apply mt-0;
+}
+
+.markdown-body .callout > :last-child {
+  @apply mb-0;
+}
+
+/*
+ * Robustness for admin-authored inline colors (e.g. <div style="background:#1e293b;color:#e2e8f0">):
+ * descendants that the theme would otherwise force to a fixed color (bold, headings, links, markers…)
+ * inherit the author's text color so they stay readable on the author's background.
+ */
+.markdown-body [style*='color'] :is(h1, h2, h3, h4, p, li, strong, em, blockquote, th, td) {
+  color: inherit;
+}
+
+.markdown-body [style*='color'] a {
+  color: inherit;
+  text-decoration-color: currentColor;
+}
+
+.markdown-body [style*='color'] li::marker {
+  color: inherit;
+}
+
+.markdown-body [style*='color'] code {
+  color: inherit;
+  background-color: rgb(127 127 127 / 0.2);
 }
