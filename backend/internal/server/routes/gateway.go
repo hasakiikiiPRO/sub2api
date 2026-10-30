@@ -605,6 +605,9 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 					c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "message": err.Error()}})
 					return
 				}
+				if apiKey.Group.Platform == service.PlatformComposite && !isForcedAntigravity(c) {
+					decision = resolver.ApplyArgonGeminiFallback(c.Request.Context(), decision)
+				}
 			}
 			if decision.UpstreamModel != routeUpstreamModel {
 				// Collapse duplicate/case-variant model keys so all downstream JSON

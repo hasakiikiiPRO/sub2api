@@ -36,6 +36,7 @@ func (d CompositeRouteDecision) AmbiguousMessage() string {
 type CompositeRouteResolver struct {
 	repo                   CompositeModelRouteRepository
 	modelOwnershipResolver CompositeModelOwnershipResolver
+	platformAvailability   CompositePlatformAvailability
 }
 
 func NewCompositeRouteResolver(repo CompositeModelRouteRepository) *CompositeRouteResolver {
