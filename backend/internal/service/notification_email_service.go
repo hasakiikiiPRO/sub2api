@@ -764,7 +764,14 @@ func renderNotificationEmailString(event, raw string, variables map[string]strin
 }
 
 func notificationEmailRawHTMLAllowed(event, placeholder string) bool {
-	return event == NotificationEmailEventOpsScheduledReport && placeholder == "report_html"
+	switch {
+	case event == NotificationEmailEventOpsScheduledReport && placeholder == "report_html":
+		return true
+	case event == NotificationEmailEventOpsAlert && placeholder == "alert_details_html":
+		// Built by buildOpsAlertDetailsHTML, which escapes every dynamic value.
+		return true
+	}
+	return false
 }
 
 func notificationEmailAllowedPlaceholderSet(event string) map[string]struct{} {
@@ -935,7 +942,10 @@ func notificationEmailSampleVariables(locale string) map[string]string {
 			"operator":            ">=",
 			"metric_value":        "12.50",
 			"threshold_value":     "10.00",
-			"alert_description":   "最近 10 分钟错误率超过阈值",
+			"alert_description":   "过去 5 分钟共 40 个请求，失败 5 个，错误率 12.5%（告警线 > 5%）。",
+			"alert_headline":      "错误率过高：账号 #43 示例账号 登录凭证失效",
+			"alert_details_html":  "<div><b>5 次</b> · 账号 #43 示例账号 · gpt-6-astra · HTTP 502（上游 401）</div><div>原因：上游账号的登录令牌过期或被吊销</div><div>建议：后台「账号管理」找到该账号点「刷新令牌」</div>",
+			"ops_dashboard_url":   "https://example.com/admin/ops",
 			"report_name":         "日报",
 			"report_type":         "daily_summary",
 			"report_start_time":   "2026-07-18T01:00:26Z",
@@ -983,7 +993,10 @@ func notificationEmailSampleVariables(locale string) map[string]string {
 		"operator":            ">=",
 		"metric_value":        "12.50",
 		"threshold_value":     "10.00",
-		"alert_description":   "Error rate exceeded threshold in the last 10 minutes.",
+		"alert_description":   "40 requests in the last 5 minutes, 5 failed, error rate 12.5% (threshold > 5%).",
+		"alert_headline":      "High error rate: account #43 credentials expired",
+		"alert_details_html":  "<div><b>5x</b> · account #43 · gpt-6-astra · HTTP 502 (upstream 401)</div><div>Cause: upstream OAuth token expired or revoked</div>",
+		"ops_dashboard_url":   "https://example.com/admin/ops",
 		"report_name":         "Daily summary",
 		"report_type":         "daily_summary",
 		"report_start_time":   "2026-07-18T01:00:26Z",
@@ -1136,7 +1149,8 @@ var notificationEmailEventDefinitions = map[string]NotificationEmailEventInfo{
 		Category:    "ops",
 		Optional:    false,
 		Placeholders: append(append([]string{}, notificationEmailCommonPlaceholders...),
-			"rule_name", "severity", "alert_status", "metric_type", "operator", "metric_value", "threshold_value", "triggered_at", "alert_description"),
+			"rule_name", "severity", "alert_status", "metric_type", "operator", "metric_value", "threshold_value", "triggered_at", "alert_description",
+			"alert_headline", "alert_details_html", "ops_dashboard_url"),
 	},
 	NotificationEmailEventOpsScheduledReport: {
 		Event:       NotificationEmailEventOpsScheduledReport,
@@ -1406,24 +1420,20 @@ var notificationEmailOfficialTemplates = map[string]map[string]notificationEmail
 	},
 	NotificationEmailEventOpsAlert: {
 		notificationEmailDefaultLocale: {
-			Subject: "[Ops Alert][{{severity}}] {{rule_name}}",
+			Subject: "[Ops Alert][{{severity}}] {{alert_headline}}",
 			HTML: notificationEmailCard("#ea580c", "Ops alert", `
-<p><strong>Rule</strong>: {{rule_name}}</p>
-<p><strong>Severity</strong>: {{severity}}</p>
-<p><strong>Status</strong>: {{alert_status}}</p>
-<p><strong>Metric</strong>: {{metric_type}} {{operator}} {{metric_value}} (threshold {{threshold_value}})</p>
-<p><strong>Fired at</strong>: {{triggered_at}}</p>
-<p><strong>Description</strong>: {{alert_description}}</p>`),
+<p style="margin-top:0;font-size:17px;font-weight:600;">{{alert_headline}}</p>
+<p>{{alert_description}}</p>
+{{alert_details_html}}
+<p class="muted">Rule: {{rule_name}} · Severity {{severity}} · Fired at {{triggered_at}}<br>Metric: {{metric_type}} = {{metric_value}} (threshold {{operator}} {{threshold_value}})</p>`),
 		},
 		notificationEmailLocaleChinese: {
-			Subject: "[运维告警][{{severity}}] {{rule_name}}",
+			Subject: "[运维告警][{{severity}}] {{alert_headline}}",
 			HTML: notificationEmailCard("#ea580c", "运维告警", `
-<p><strong>规则</strong>：{{rule_name}}</p>
-<p><strong>严重级别</strong>：{{severity}}</p>
-<p><strong>状态</strong>：{{alert_status}}</p>
-<p><strong>指标</strong>：{{metric_type}} {{operator}} {{metric_value}}（阈值 {{threshold_value}}）</p>
-<p><strong>触发时间</strong>：{{triggered_at}}</p>
-<p><strong>说明</strong>：{{alert_description}}</p>`),
+<p style="margin-top:0;font-size:17px;font-weight:600;">{{alert_headline}}</p>
+<p>{{alert_description}}</p>
+{{alert_details_html}}
+<p class="muted">规则：{{rule_name}} · 级别 {{severity}} · 触发于 {{triggered_at}}<br>指标：{{metric_type}} = {{metric_value}}（告警线 {{operator}} {{threshold_value}}）</p>`),
 		},
 	},
 	NotificationEmailEventOpsScheduledReport: {

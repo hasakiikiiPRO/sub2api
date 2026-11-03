@@ -131,6 +131,7 @@ func (s *OpsService) GetAccountAvailabilityStats(ctx context.Context, platformFi
 			HasError:      hasError,
 
 			ErrorMessage: acc.ErrorMessage,
+			Schedulable:  acc.Schedulable,
 		}
 
 		if isRateLimited && acc.RateLimitResetAt != nil {
@@ -149,6 +150,7 @@ func (s *OpsService) GetAccountAvailabilityStats(ctx context.Context, platformFi
 		}
 		if isTempUnsched && acc.TempUnschedulableUntil != nil {
 			item.TempUnschedulableUntil = acc.TempUnschedulableUntil
+			item.TempUnschedulableReason = acc.TempUnschedulableReason
 		}
 
 		account[acc.ID] = item

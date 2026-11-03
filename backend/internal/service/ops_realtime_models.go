@@ -89,4 +89,7 @@ type AccountAvailability struct {
 	OverloadRemainingSec   *int64     `json:"overload_remaining_sec"`
 	ErrorMessage           string     `json:"error_message"`
 	TempUnschedulableUntil *time.Time `json:"temp_unschedulable_until,omitempty"`
+	// TempUnschedulableReason / Schedulable let alert emails explain *why* an account is out.
+	TempUnschedulableReason string `json:"temp_unschedulable_reason,omitempty"`
+	Schedulable             bool   `json:"schedulable"`
 }
