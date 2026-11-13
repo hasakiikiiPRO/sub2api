@@ -2316,8 +2316,11 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					openBlockType = ""
 				}
 
-				// If we receive streamed tool args in pieces, keep a single tool block open and emit deltas.
-				if openToolIndex >= 0 && openToolName != name {
+				argsJSONText := geminiFunctionCallArgsJSON(args)
+
+				// Streamed args for one call arrive as a cumulative or incremental continuation;
+				// a fresh complete call (parallel calls, possibly to the same tool) gets its own block.
+				if openToolIndex >= 0 && geminiFunctionCallStartsNewBlock(openToolName, seenToolJSON, name, argsJSONText) {
 					writeSSE(c.Writer, "content_block_stop", map[string]any{
 						"type":  "content_block_stop",
 						"index": openToolIndex,
@@ -2344,20 +2347,6 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 							"input": map[string]any{},
 						},
 					})
-				}
-
-				argsJSONText := "{}"
-				switch v := args.(type) {
-				case nil:
-					// keep default "{}"
-				case string:
-					if strings.TrimSpace(v) != "" {
-						argsJSONText = v
-					}
-				default:
-					if b, err := json.Marshal(args); err == nil && len(b) > 0 {
-						argsJSONText = string(b)
-					}
 				}
 
 				delta, newSeen := computeGeminiTextDelta(seenToolJSON, argsJSONText)
@@ -3331,6 +3320,38 @@ func extractGeminiParts(geminiResp map[string]any) []map[string]any {
 		}
 	}
 	return nil
+}
+
+// geminiFunctionCallArgsJSON renders functionCall.args as the JSON text streamed in input_json_delta.
+func geminiFunctionCallArgsJSON(args any) string {
+	switch v := args.(type) {
+	case nil:
+		return "{}"
+	case string:
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+		return "{}"
+	default:
+		if b, err := json.Marshal(v); err == nil && len(b) > 0 {
+			return string(b)
+		}
+		return "{}"
+	}
+}
+
+// geminiFunctionCallStartsNewBlock reports whether a functionCall part begins a new tool_use
+// instead of continuing the open one. Gemini sends each call complete in one part, so once the
+// open call's args are a complete JSON value, any different args belong to a new (parallel) call,
+// even when it targets the same tool. Identical args are treated as a repeated chunk.
+func geminiFunctionCallStartsNewBlock(openName, seenArgs, name, args string) bool {
+	if openName != name {
+		return true
+	}
+	if seenArgs == "" || !json.Valid([]byte(seenArgs)) {
+		return false
+	}
+	return strings.TrimSuffix(args, "\u0000") != seenArgs
 }
 
 func computeGeminiTextDelta(seen, incoming string) (delta, newSeen string) {

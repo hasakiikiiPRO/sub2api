@@ -720,7 +720,8 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 								if closeOpenBlock() {
 									return &geminiStreamResult{usage: &usage, firstTokenMs: firstTokenMs}, nil
 								}
-								if openToolIndex >= 0 && openToolName != name {
+								argsJSONText := geminiFunctionCallArgsJSON(fc["args"])
+								if openToolIndex >= 0 && geminiFunctionCallStartsNewBlock(openToolName, seenToolJSON, name, argsJSONText) {
 									if closeOpenTool() {
 										return &geminiStreamResult{usage: &usage, firstTokenMs: firstTokenMs}, nil
 									}
@@ -745,18 +746,6 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 									}
 								}
 
-								argsJSONText := "{}"
-								switch v := fc["args"].(type) {
-								case nil:
-								case string:
-									if strings.TrimSpace(v) != "" {
-										argsJSONText = v
-									}
-								default:
-									if b, err := json.Marshal(v); err == nil && len(b) > 0 {
-										argsJSONText = string(b)
-									}
-								}
 								delta, newSeen := computeGeminiTextDelta(seenToolJSON, argsJSONText)
 								seenToolJSON = newSeen
 								if delta != "" {
