@@ -3,6 +3,7 @@ package antigravity
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -15,7 +16,11 @@ func CleanJSONSchema(schema map[string]any) map[string]any {
 	}
 	// 0. 预处理：展开 $ref (Schema Flattening)
 	// (Go map 是引用的，直接修改 schema)
+	// 先对原始根做快照，用于解析 JSON Pointer 形式的引用（如 MCP/zod 生成的
+	// "#/properties/a/anyOf/0"），它们不指向 $defs，旧逻辑会原样留下 $ref 导致上游 400。
+	root := deepCopy(schema)
 	flattenRefs(schema, extractDefs(schema))
+	resolvePointerRefs(schema, root, 0)
 
 	// 递归清理
 	cleaned := cleanJSONSchemaRecursive(schema)
@@ -84,6 +89,75 @@ func flattenRefs(schema map[string]any, defs map[string]any) {
 			}
 		}
 	}
+}
+
+const maxPointerRefDepth = 8
+
+// resolvePointerRefs 展开 flattenRefs 之后残留的 $ref：能按 JSON Pointer 从根解析的就合并
+// 目标内容（不覆盖已有 key），解析不了或嵌套过深（循环引用）的直接删除 $ref——Gemini
+// function_declarations 不认识 $ref 字段。
+func resolvePointerRefs(node map[string]any, root any, depth int) {
+	if ref, ok := node["$ref"].(string); ok {
+		delete(node, "$ref")
+		if depth < maxPointerRefDepth {
+			if target, ok := lookupJSONPointer(root, ref).(map[string]any); ok {
+				for k, v := range target {
+					if _, has := node[k]; !has {
+						node[k] = deepCopy(v)
+					}
+				}
+				resolvePointerRefs(node, root, depth+1)
+				return
+			}
+		}
+	}
+	for _, v := range node {
+		switch sub := v.(type) {
+		case map[string]any:
+			resolvePointerRefs(sub, root, depth)
+		case []any:
+			for _, item := range sub {
+				if m, ok := item.(map[string]any); ok {
+					resolvePointerRefs(m, root, depth)
+				}
+			}
+		}
+	}
+}
+
+// lookupJSONPointer 解析 "#/a/b/0" 形式的本地 JSON Pointer，失败返回 nil。
+func lookupJSONPointer(root any, ref string) any {
+	if !strings.HasPrefix(ref, "#") {
+		return nil
+	}
+	path := strings.TrimPrefix(ref, "#")
+	if path == "" {
+		return root
+	}
+	if !strings.HasPrefix(path, "/") {
+		return nil
+	}
+	cur := root
+	for _, tok := range strings.Split(path[1:], "/") {
+		tok = strings.ReplaceAll(strings.ReplaceAll(tok, "~1", "/"), "~0", "~")
+		switch c := cur.(type) {
+		case map[string]any:
+			next, ok := c[tok]
+			if !ok {
+				return nil
+			}
+			cur = next
+		case []any:
+			i, err := strconv.Atoi(tok)
+			if err != nil || i < 0 || i >= len(c) {
+				return nil
+			}
+			cur = c[i]
+		default:
+			return nil
+		}
+	}
+	return cur
 }
 
 // deepCopy 深拷贝 (简单实现，仅针对 JSON 类型)
