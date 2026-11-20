@@ -2,6 +2,7 @@ package antigravity
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -546,8 +547,13 @@ func mergeAllOf(m map[string]any) {
 				delete(mergedReq, s) // already exists
 			}
 		}
-		// append new
+		// append new（排序：map 遍历顺序随机，会让工具声明每次序列化不同而破坏缓存前缀）
+		newReqs := make([]string, 0, len(mergedReq))
 		for r := range mergedReq {
+			newReqs = append(newReqs, r)
+		}
+		sort.Strings(newReqs)
+		for _, r := range newReqs {
 			validReqs = append(validReqs, r)
 		}
 		m["required"] = validReqs

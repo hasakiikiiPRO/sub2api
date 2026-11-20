@@ -420,6 +420,22 @@ func buildSystemInstruction(system json.RawMessage, modelName string, opts Trans
 	}
 }
 
+// neutralizeMessageSystemParts 对 messages[] 中 role:system 的文本做与顶层 system 相同的
+// 身份/指纹清洗（确定性替换，不影响缓存前缀稳定性），清洗后为空的文本段丢弃。
+func neutralizeMessageSystemParts(parts []GeminiPart) []GeminiPart {
+	out := parts[:0]
+	for _, part := range parts {
+		if part.Text != "" && !part.Thought {
+			part.Text = NeutralizeSystemIdentity(part.Text)
+			if strings.TrimSpace(part.Text) == "" && part.InlineData == nil && part.FunctionCall == nil && part.FunctionResponse == nil {
+				continue
+			}
+		}
+		out = append(out, part)
+	}
+	return out
+}
+
 // buildContents 构建 contents
 func buildContents(messages []ClaudeMessage, toolIDToName map[string]string, isThinkingEnabled, allowDummyThought, multimodalToolResults bool) ([]GeminiContent, []GeminiPart, bool, error) {
 	var contents []GeminiContent
@@ -441,8 +457,18 @@ func buildContents(messages []ClaudeMessage, toolIDToName map[string]string, isT
 		}
 
 		if role == "system" {
-			systemParts = append(systemParts, parts...)
-			continue
+			parts = neutralizeMessageSystemParts(parts)
+			// 只有对话开始前的 system 消息并入 systemInstruction。Claude Code 每轮都会在
+			// messages 末尾追加 role:system（如 <total_tokens>），若也抽到 systemInstruction，
+			// 前缀每轮都会变长，Gemini 隐式缓存永远命中 0%。对话中途的 system 消息原地
+			// 以 user 文本保留（与相邻 user 轮合并），历史前缀保持字节不变。
+			// 仅当紧跟在 user 轮之后才原地保留；跟在 model 轮之后（tool_use 与
+			// tool_result 之间、assistant prefill 之后）沿用旧的抽取行为，避免改变语义。
+			if len(contents) == 0 || contents[len(contents)-1].Role != "user" {
+				systemParts = append(systemParts, parts...)
+				continue
+			}
+			role = "user"
 		}
 
 		// 只有 Gemini 模型支持 dummy thinking block workaround
